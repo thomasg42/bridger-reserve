@@ -151,7 +151,7 @@ function render() {
   drawLines(q);
   total.textContent = `Trip charge ${formatDollars(q.totalCents)}`;
   showTotal(q.totalCents);
-  status.textContent = "The trip charge is the lines above. The car is not held until Max or Terry reply.";
+  status.textContent = "The trip charge is the lines above. The car is not held until Terry or Max reply.";
 
   const body = [
     "Bridger Reserve quote",
@@ -171,7 +171,7 @@ function render() {
     "Empty travel is included only as entered.",
     "The airport pickup fee is charged by Bridger Reserve when the pickup is at BZN.",
     "Gratuity and tax are not added here.",
-    "The car is not held until Max or Terry reply.",
+    "The car is not held until Terry or Max reply.",
   ].join("\n");
   const href = `mailto:BridgerReserve@gmail.com?subject=${encodeURIComponent("Bridger Reserve quote")}&body=${encodeURIComponent(body)}`;
   email.disabled = false;
