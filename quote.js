@@ -1,5 +1,6 @@
 import { formatDollars, quote } from "./fare.js";
 
+// Illustrative miles and minutes from the fare sheet. Any other pair is entered by the guest.
 const PAIRS = {
   "bzn|hotel": [10, 20],
   "bzn|bigsky": [55, 80],
@@ -8,23 +9,37 @@ const PAIRS = {
 };
 
 const reduce = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
-const pickup = document.querySelector("#pickup");
-const arrival = document.querySelector("#arrival");
-const miles = document.querySelector("#miles");
-const minutes = document.querySelector("#minutes");
-const airport = document.querySelector("#airport");
-const wait = document.querySelector("#wait");
-const stop = document.querySelector("#stop");
-const slow = document.querySelector("#slow");
-const emptyMiles = document.querySelector("#empty-miles");
-const emptyMinutes = document.querySelector("#empty-minutes");
-const lines = document.querySelector("#lines");
-const total = document.querySelector("#total");
-const email = document.querySelector("#email");
-const status = document.querySelector("#quote-status");
-const pairHint = document.querySelector("#pair-hint");
-const clubNote = document.querySelector("#club-note");
-const airportLock = document.querySelector("#airport-lock");
+const $ = (selector) => document.querySelector(selector);
+const pickup = $("#pickup");
+const arrival = $("#arrival");
+const miles = $("#miles");
+const minutes = $("#minutes");
+const airport = $("#airport");
+const wait = $("#wait");
+const stop = $("#stop");
+const slow = $("#slow");
+const emptyMiles = $("#empty-miles");
+const emptyMinutes = $("#empty-minutes");
+const lines = $("#lines");
+const total = $("#total");
+const totalVisual = $(".total-visual");
+const email = $("#email");
+const status = $("#quote-status");
+const pairHint = $("#pair-hint");
+const clubNote = $("#club-note");
+const airportLock = $("#airport-lock");
+const routeLabel = $("#receipt-route");
+const swap = $("#swap");
+const chips = [...document.querySelectorAll(".chip[data-pair]")];
+
+const SHORT = {
+  bzn: "BZN",
+  hotel: "Downtown Bozeman",
+  bigsky: "Big Sky",
+  moon: "Moonlight Basin",
+  club: "Yellowstone Club",
+  other: "Another address",
+};
 
 function optional(el) {
   if (el.value.trim() === "") return 0;
@@ -44,10 +59,64 @@ function placeLabel(select) {
   return select.selectedOptions[0].textContent;
 }
 
+/* the total rolls to its new value */
+let shownCents = null;
+let tween = 0;
+function showTotal(cents) {
+  cancelAnimationFrame(tween);
+  if (cents === null) {
+    shownCents = null;
+    totalVisual.textContent = "";
+    return;
+  }
+  const from = shownCents === null ? cents : shownCents;
+  shownCents = cents;
+  if (reduce || from === cents) {
+    totalVisual.textContent = formatDollars(cents);
+    return;
+  }
+  const start = performance.now();
+  const step = (now) => {
+    const p = Math.min(1, (now - start) / 420);
+    const eased = 1 - (1 - p) ** 3;
+    totalVisual.textContent = formatDollars(Math.round(from + (cents - from) * eased));
+    if (p < 1) tween = requestAnimationFrame(step);
+  };
+  tween = requestAnimationFrame(step);
+}
+
+const previous = new Map();
+function drawLines(q) {
+  const rows = q.lines.map((line) => {
+    const row = document.createElement("div");
+    const name = document.createElement("dt");
+    const amount = document.createElement("dd");
+    name.textContent = line.label;
+    amount.textContent = formatDollars(line.cents);
+    if (line.cents === 0) row.classList.add("is-zero");
+    if (previous.has(line.id) && previous.get(line.id) !== line.cents && !reduce) amount.classList.add("is-changed");
+    previous.set(line.id, line.cents);
+    row.append(name, amount);
+    return row;
+  });
+  lines.replaceChildren(...rows);
+}
+
+function syncChips() {
+  const key = `${pickup.value}|${arrival.value}`;
+  const known = PAIRS[key];
+  for (const chip of chips) {
+    const on = chip.dataset.pair === key && known && Number(miles.value) === known[0] && Number(minutes.value) === known[1];
+    chip.setAttribute("aria-pressed", on ? "true" : "false");
+  }
+  routeLabel.textContent = `${SHORT[pickup.value]} to ${SHORT[arrival.value]}`;
+}
+
 function render() {
   const known = PAIRS[`${pickup.value}|${arrival.value}`];
   pairHint.hidden = !known;
   clubNote.hidden = pickup.value !== "club" && arrival.value !== "club";
+  syncChips();
 
   const fields = [miles, minutes, wait, stop, slow, emptyMiles, emptyMinutes];
   const negative = fields.some((el) => el.value.trim() !== "" && Number(el.value) < 0);
@@ -58,7 +127,9 @@ function render() {
 
   if (!ready) {
     lines.replaceChildren();
+    previous.clear();
     total.textContent = "";
+    showTotal(null);
     status.textContent = negative ? "Use zero or more." : "Enter miles and minutes.";
     email.disabled = true;
     email.onclick = null;
@@ -77,18 +148,9 @@ function render() {
     positionMinutes,
   });
 
-  lines.replaceChildren(
-    ...q.lines.map((line) => {
-      const row = document.createElement("div");
-      const name = document.createElement("dt");
-      const amount = document.createElement("dd");
-      name.textContent = line.label;
-      amount.textContent = formatDollars(line.cents);
-      row.append(name, amount);
-      return row;
-    }),
-  );
-  total.textContent = formatDollars(q.totalCents);
+  drawLines(q);
+  total.textContent = `Trip charge ${formatDollars(q.totalCents)}`;
+  showTotal(q.totalCents);
   status.textContent = "The trip charge is the lines above. The car is not held until Max or Terry reply.";
 
   const body = [
@@ -144,6 +206,13 @@ function syncAirport() {
   }
 }
 
+function choose(from, to) {
+  pickup.value = from;
+  arrival.value = to;
+  syncAirport();
+  applyPair();
+}
+
 pickup.addEventListener("change", () => {
   syncAirport();
   applyPair();
@@ -153,76 +222,31 @@ for (const el of [miles, minutes, airport, wait, stop, slow, emptyMiles, emptyMi
   el.addEventListener("input", render);
 }
 
-function reveal() {
-  const nodes = document.querySelectorAll("[data-pause]");
-  if (reduce || !("IntersectionObserver" in window)) {
-    nodes.forEach((node) => node.classList.add("is-in"));
-    return;
-  }
-  const io = new IntersectionObserver(
-    (entries) => {
-      entries.forEach((entry) => {
-        if (!entry.isIntersecting) return;
-        entry.target.classList.add("is-in");
-        io.unobserve(entry.target);
-      });
-    },
-    { threshold: 0.35, rootMargin: "0px 0px -8% 0px" },
-  );
-  nodes.forEach((node) => io.observe(node));
+for (const chip of chips) {
+  chip.addEventListener("click", () => {
+    const [from, to] = chip.dataset.pair.split("|");
+    choose(from, to);
+  });
 }
 
-function countSums() {
-  const sums = document.querySelectorAll(".sum[data-cents]");
-  const finish = (el) => {
-    el.textContent = formatDollars(Number(el.dataset.cents));
-  };
-  if (reduce || !("IntersectionObserver" in window)) {
-    sums.forEach(finish);
-    return;
-  }
-  const io = new IntersectionObserver(
-    (entries) => {
-      entries.forEach((entry) => {
-        if (!entry.isIntersecting) return;
-        const el = entry.target;
-        io.unobserve(el);
-        const end = Number(el.dataset.cents);
-        const start = performance.now();
-        const tick = (now) => {
-          const p = Math.min(1, (now - start) / 700);
-          const eased = 1 - (1 - p) ** 3;
-          el.textContent = formatDollars(Math.round(end * eased));
-          if (p < 1) requestAnimationFrame(tick);
-          else finish(el);
-        };
-        requestAnimationFrame(tick);
-      });
-    },
-    { threshold: 0.6 },
-  );
-  sums.forEach((el) => io.observe(el));
+swap.addEventListener("click", () => {
+  const from = pickup.value;
+  choose(arrival.value, from);
+  swap.classList.toggle("is-spun");
+});
+
+// "Price a Club trip" and similar links preset the route on the way down.
+for (const link of document.querySelectorAll("[data-preset]")) {
+  link.addEventListener("click", () => {
+    const [from, to] = link.dataset.preset.split("|");
+    choose(from, to);
+  });
 }
 
-function ridge() {
-  const node = document.querySelector(".ridge");
-  if (!node || reduce) return;
-  window.addEventListener(
-    "scroll",
-    () => {
-      node.style.transform = `translate3d(0, ${Math.min(24, window.scrollY * 0.035)}px, 0)`;
-    },
-    { passive: true },
-  );
-}
-
-document.querySelector("#quote").addEventListener("submit", (event) => {
+$("#quote").addEventListener("submit", (event) => {
   event.preventDefault();
   if (!email.disabled && email.onclick) email.onclick();
 });
 
 syncAirport();
 applyPair();
-reveal();
-countSums();
-ridge();
