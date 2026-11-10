@@ -1,4 +1,4 @@
 User-agent: *
 Allow: /
 
-Sitemap: https://thomasg42.github.io/bridger-reserve/sitemap.xml
+Sitemap: https://bridgerreserve.com/sitemap.xml
