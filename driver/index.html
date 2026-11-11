@@ -1,0 +1,131 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <meta name="robots" content="noindex, nofollow">
+  <title>Bridger Reserve Driver</title>
+  <meta name="theme-color" content="#05070b">
+  <meta name="color-scheme" content="dark">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+  <meta name="apple-mobile-web-app-title" content="BR Driver">
+  <link rel="manifest" href="manifest.webmanifest">
+  <link rel="icon" href="../favicon.svg" type="image/svg+xml">
+  <link rel="apple-touch-icon" href="../assets/apple-touch-icon.png">
+  <link rel="stylesheet" href="driver.css">
+</head>
+<body>
+  <header class="bar">
+    <p class="brand">Bridger Reserve <span>Driver</span></p>
+    <p id="sync" class="sync" data-state="local" role="status">Phone only</p>
+    <nav class="tabs" aria-label="Driver app">
+      <button type="button" data-view="trip" aria-current="page">Trip</button>
+      <button type="button" data-view="records">Trips</button>
+      <button type="button" data-view="settings">Pricing</button>
+    </nav>
+  </header>
+
+  <main>
+    <!-- staff PIN, only when the cloud is connected -->
+    <section id="view-lock" class="view" hidden aria-labelledby="lock-title">
+      <h1 id="lock-title">Staff PIN</h1>
+      <p class="lede">Enter the 6-digit PIN Terry or Max gave you. This phone remembers it.</p>
+      <form id="lock-form" class="stack">
+        <input id="pin" type="password" inputmode="numeric" autocomplete="one-time-code" pattern="[0-9]{6}" maxlength="6" aria-label="6-digit staff PIN">
+        <button class="big gold" type="submit">Unlock</button>
+        <p id="lock-error" class="error" role="alert"></p>
+      </form>
+    </section>
+
+    <!-- ready: no trip running -->
+    <section id="view-ready" class="view" hidden aria-labelledby="ready-title">
+      <h1 id="ready-title" class="sr-only">New trip</h1>
+      <label class="field"><span>Customer</span><input id="ready-customer" type="text" autocomplete="off" autocapitalize="words" placeholder="Name on the booking"></label>
+      <label class="switch"><input id="ready-airport" type="checkbox"><span class="switch-ui" aria-hidden="true"></span><span><strong>Airport pickup</strong><small>Adds the airport fee once and a longer grace period at the pickup.</small></span></label>
+      <label class="field"><span>Deposit received</span><input id="ready-deposit" type="number" inputmode="decimal" min="0" step="0.01" placeholder="0.00"></label>
+      <button id="start" class="big gold" type="button">Start Trip</button>
+      <p class="rule"><strong>Press Start Trip at the pickup.</strong> The drive to the customer is never on their fare. End Trip at the drop-off.</p>
+      <div id="ready-recent" class="recent"></div>
+    </section>
+
+    <!-- active trip -->
+    <section id="view-active" class="view" hidden aria-labelledby="active-title">
+      <h1 id="active-title" class="sr-only">Trip running</h1>
+      <p id="mode" class="mode" data-mode="driving">Driving</p>
+      <p class="fare"><span id="live-fare">$0.00</span></p>
+      <dl class="live">
+        <div><dt>Time</dt><dd id="live-time">0:00</dd></div>
+        <div><dt>Miles</dt><dd id="live-miles">0.0</dd></div>
+        <div><dt>Waiting</dt><dd id="live-wait">$0.00</dd></div>
+      </dl>
+      <div id="wait-panel" class="wait-panel" hidden>
+        <p id="wait-label" class="wait-label">Pickup</p>
+        <p class="wait-clock"><span id="wait-clock">0:00</span> <small id="wait-grace">of 5:00 included</small></p>
+        <div class="meter" aria-hidden="true"><span id="wait-bar"></span></div>
+        <p id="wait-note" class="wait-note"></p>
+        <button id="new-stop" class="link" type="button">Count this as a new stop</button>
+      </div>
+      <button id="wait" class="big gold" type="button">Start Wait</button>
+      <button id="end" class="big line" type="button">End Trip</button>
+      <label class="switch compact"><input id="active-airport" type="checkbox"><span class="switch-ui" aria-hidden="true"></span><span><strong>Airport pickup</strong></span></label>
+      <p id="gps" class="gps" data-state="off">GPS starting…</p>
+    </section>
+
+    <!-- review before the charge is final -->
+    <section id="view-review" class="view" hidden aria-labelledby="review-title">
+      <h1 id="review-title">Review the charge</h1>
+      <p class="lede" id="review-when"></p>
+      <ul id="flags" class="flags"></ul>
+      <div class="grid2">
+        <label class="field"><span>Customer</span><input id="r-customer" type="text" autocapitalize="words"></label>
+        <label class="field"><span>Deposit received</span><input id="r-deposit" type="number" inputmode="decimal" min="0" step="0.01"></label>
+        <label class="field"><span>Miles</span><input id="r-miles" type="number" inputmode="decimal" min="0" step="0.1"><small id="r-miles-tracked"></small></label>
+        <label class="field"><span>Driving minutes</span><input id="r-drive" type="number" inputmode="decimal" min="0" step="0.1"><small id="r-drive-tracked"></small></label>
+        <label class="field"><span>Billed waiting minutes</span><input id="r-wait" type="number" inputmode="decimal" min="0" step="0.1"><small id="r-wait-tracked"></small></label>
+        <label class="switch"><input id="r-airport" type="checkbox"><span class="switch-ui" aria-hidden="true"></span><span><strong>Airport pickup</strong></span></label>
+      </div>
+      <label class="field"><span>Notes</span><textarea id="r-notes" rows="2"></textarea></label>
+      <dl id="r-lines" class="lines"></dl>
+      <p class="total-row"><span>Final fare</span><strong id="r-total">$0.00</strong></p>
+      <p class="total-row sub"><span>Balance after deposit</span><strong id="r-balance">$0.00</strong></p>
+      <button id="finalize" class="big gold" type="button">Finalize charge</button>
+      <div class="row">
+        <button id="resume-trip" class="line" type="button">Back to the trip</button>
+        <button id="discard" class="line danger" type="button">Discard trip</button>
+      </div>
+    </section>
+
+    <!-- saved trips -->
+    <section id="view-records" class="view" hidden aria-labelledby="records-title">
+      <div class="head-row">
+        <h1 id="records-title">Trips</h1>
+        <button id="export" class="line" type="button">Export CSV</button>
+      </div>
+      <ol id="records" class="records"></ol>
+    </section>
+
+    <!-- private pricing -->
+    <section id="view-settings" class="view" hidden aria-labelledby="settings-title">
+      <h1 id="settings-title">Pricing</h1>
+      <p class="lede">Private. These numbers drive the meter on every staff phone. The website shows guests totals only.</p>
+      <form id="rates" class="stack"></form>
+      <label class="switch"><input id="keep-awake" type="checkbox"><span class="switch-ui" aria-hidden="true"></span><span><strong>Keep the screen on during a trip</strong><small>GPS counts every mile while this screen stays open.</small></span></label>
+      <button id="sign-out" class="line" type="button" hidden>Sign this phone out</button>
+      <p class="fine" id="about"></p>
+    </section>
+  </main>
+
+  <dialog id="confirm">
+    <form method="dialog">
+      <p id="confirm-text"></p>
+      <div class="row">
+        <button value="no" class="line">Cancel</button>
+        <button value="yes" class="gold" id="confirm-yes">Yes</button>
+      </div>
+    </form>
+  </dialog>
+
+  <script type="module" src="driver.js"></script>
+</body>
+</html>
