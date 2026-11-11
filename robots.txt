@@ -1,4 +1,5 @@
 User-agent: *
 Allow: /
+Disallow: /driver/
 
 Sitemap: https://bridgerreserve.com/sitemap.xml
